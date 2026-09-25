@@ -53,4 +53,33 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("textContent", script, StringComparison.Ordinal);
     }
+    [Fact]
+    public async Task GetSeveritySummary_ReturnsFullSeverityList()
+    {
+        var summary = await _client.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
+            "/api/incidents/severity-summary");
+
+        Assert.NotNull(summary);
+        Assert.Equal(4, summary.Count);
+        Assert.Contains(summary, item => item.Severity == "Critical" && item.Count == 0);
+    }
+
+    [Fact]
+    public async Task GetSeveritySummary_ForInvalidStatus_ReturnsValidationProblem400()
+    {
+        using var response = await _client.GetAsync(
+            "/api/incidents/severity-summary?status=Unknown");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetSeveritySummary_FilteredByClosedStatus_AllCountsAreZero()
+    {
+        var summary = await _client.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
+            "/api/incidents/severity-summary?status=Closed");
+
+        Assert.NotNull(summary);
+        Assert.All(summary, item => Assert.Equal(0, item.Count));
+    }
 }
