@@ -50,6 +50,76 @@ T-08	після dotnet run ... -- --reset-database	повторити T-02 і T-
 ## 5. Security-сценарій
 
 Не застосовується для ЛР 1: starter навмисно не містить навмисно вразливого стану для цієї роботи (baseline без автентифікації й авторизації). Security- сценарій із гіпотезою, локальним PoC, першопричиною, виправленням і позитивною регресією буде оформлено, починаючи з ЛР 2 (пошук у title/description, параметризація значень і allowlist сортування — за docs/variant-02-a.md, профіль «Пошук»).
+## 5a. Самостійно знайдена проблема: неповна перевірка готовності `/health`
+
+**Виявлена проблема.** Endpoint `GET /health` використовував лише
+`dbContext.Database.CanConnectAsync()` — цей метод перевіряє тільки встановлення
+з'єднання з PostgreSQL, а не те, що застосунок реально готовий обробляти запити.
+Якщо з якоїсь причини міграції схеми не застосовані (наприклад, конфігураційний
+прапорець `Database:ApplyMigrationsOnStartup` вимкнено, або хтось забув прогнати
+їх вручну в іншому середовищі), `/health` все одно повертав `200 {"status":"ready"}`,
+хоча будь-який реальний запит на кшталт `GET /api/incidents` впав би з необробленою
+помилкою PostgreSQL про відсутню таблицю `incidents`.
+
+**Як знайдено.** Під час аналізу `Program.cs` звернуто увагу, що
+`DatabaseBootstrap.InitializeAsync(...)` (застосування міграцій) викликається
+до `app.Run()` — тобто в межах одного звичайного запуску сервер не приймає
+HTTP-запитів, доки міграція не завершиться, і прямої "гонки" під час старту немає.
+Однак подальший розгляд `DatabaseBootstrap.cs` показав, що застосування міграції
+прикрите умовою `if (!configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{ return; }` — якщо цей прапорець вимкнено, метод завершується без застосування
+міграцій, а сервер все одно запускається і починає обслуговувати запити.
+
+**Як перевірено.** Відтворено сценарій: тимчасово встановлено
+`"ApplyMigrationsOnStartup": false`, піднято повністю чисту базу даних без жодної
+таблиці (`docker compose down -v` + `up -d --wait`), запущено API.
+
+| Крок | Запит | Результат до виправлення |
+|---|---|---|
+| 1 | `GET /health` | `200 {"status":"ready"}` — хибно позитивний результат |
+| 2 | `GET /api/incidents` | `500`, необроблена помилка PostgreSQL `relation "incidents" does not exist` |
+
+Це підтвердило розбіжність між станом `/health` і фактичною готовністю системи.
+Після цього конфігурацію й базу даних повернуто до штатного стану
+(`ApplyMigrationsOnStartup: true`, `--reset-database`), повний набір тестів
+(7/7) пройдено без регресій.
+
+**Виправлення.** До `/health` додано другу перевірку —
+`dbContext.Database.GetPendingMigrationsAsync()`: якщо є незастосовані міграції,
+endpoint повертає `503` з поясненням `"Є невиконані міграції."`, а не `200`.
+Перевірка безпечна навіть на абсолютно порожній базі без службової таблиці
+історії міграцій — EF Core коректно трактує її відсутність як "усі міграції
+ще не застосовані", тому виключення не виникає.
+
+```csharp
+app.MapGet("/health", async (SecureLabDbContext dbContext, CancellationToken cancellationToken) =>
+{
+    if (!await dbContext.Database.CanConnectAsync(cancellationToken))
+    {
+        return Results.Problem(
+            title: "База даних недоступна",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync(cancellationToken);
+    if (pendingMigrations.Any())
+    {
+        return Results.Problem(
+            title: "База даних не готова",
+            detail: "Є невиконані міграції.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Ok(new { status = "ready" });
+})
+    .WithName("GetHealth")
+    .Produces(StatusCodes.Status200OK)
+    .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+```
+
+**Результат після виправлення:** на тому самому зламаному сценарії (чиста база,
+`ApplyMigrationsOnStartup: false`) `GET /health` тепер коректно повертає `503`
+із поясненням причини, замість хибного `200`.
 ## 6. Висновок
 
 Систему запущено локально (PostgreSQL у Docker Compose, API на .NET SDK 10.0.302/ASP.NET Core, browser client на Vanilla JavaScript). Простежено повний маршрут GET /api/incidents/{id} від кліку в браузері до таблиці incidents у PostgreSQL і назад через DevTools Network, код endpoint/query/ DbContext і пряму SQL-звірку; підтверджено 5 меж довіри на цьому шляху. Реалізовано наскрізне розширення GET /api/incidents/severity-summary з політикою «повний перелік severity» (усі 4 рівні, включно з count: 0 для відсутніх) та необов'язковим query-параметром status (серверна валідація через allowlist на базі Enum.TryParse/Enum.IsDefined, 400 для некоректного значення). Успішний, порожній і помилковий сценарії перевірено через .http-файл (7 сценаріїв для severity-summary і суміжних маршрутів) і DevTools Network; додано 3 інтеграційні тести (разом із базовими — 7/7 зелених). Клієнт безпечно відображає результат через textContent/ createElement, без використання innerHTML. Стенд відтворюється командою --reset-database до того самого seed-стану.

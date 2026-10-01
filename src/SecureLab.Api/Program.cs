@@ -50,11 +50,25 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapGet("/health", async (SecureLabDbContext dbContext, CancellationToken cancellationToken) =>
-    await dbContext.Database.CanConnectAsync(cancellationToken)
-        ? Results.Ok(new { status = "ready" })
-        : Results.Problem(
+{
+    if (!await dbContext.Database.CanConnectAsync(cancellationToken))
+    {
+        return Results.Problem(
             title: "База даних недоступна",
-            statusCode: StatusCodes.Status503ServiceUnavailable))
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync(cancellationToken);
+    if (pendingMigrations.Any())
+    {
+        return Results.Problem(
+            title: "База даних не готова",
+            detail: "Є невиконані міграції.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Ok(new { status = "ready" });
+})
     .WithName("GetHealth")
     .Produces(StatusCodes.Status200OK)
     .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
