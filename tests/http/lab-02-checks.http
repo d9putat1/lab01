@@ -1,0 +1,92 @@
+@api = http://localhost:5080
+
+### USB — перевірка встановлення
+GET {{api}}/api/incidents/search?q=USB
+
+
+### Перевірка відомого дефекту (ще НЕ виправляємо!)
+GET {{api}}/api/incidents/search?q=O%27Brien
+
+
+### Коректне створення (T-01)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Тестовий інцидент",
+  "description": "Звичайний опис для перевірки створення.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### Некоректний severity "7" (T-02)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Перевірка severity",
+  "description": "Опис для перевірки некоректного severity.",
+  "severity": "7",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### Відсутній occurredAtUtc (T-02)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Без дати",
+  "description": "Опис без occurredAtUtc.",
+  "severity": "Low"
+}
+
+### Дата більш ніж на 5 хв у майбутньому (T-02)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Дата в майбутньому",
+  "description": "Опис з майбутньою датою.",
+  "severity": "Low",
+  "occurredAtUtc": "2099-01-01T00:00:00Z"
+}
+
+### Overposting-проба: зайві поля ігноруються
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Overposting проба",
+  "description": "Перевірка, що server-managed поля не приймаються.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z",
+  "ownerUserId": "99999999-9999-9999-9999-999999999999",
+  "status": "Closed",
+  "id": "11111111-1111-1111-1111-111111111111"
+}
+
+### T-06 — ресурс не знайдено (готовий endpoint з ЛР1)
+GET {{api}}/api/incidents/99999999-9999-9999-9999-999999999999
+
+
+### T-03 — перше створення (201)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Дублікат для T-03",
+  "description": "Перший запис з цим title.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### T-03 — повторне створення того самого title (409)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Дублікат для T-03",
+  "description": "Другий запис з тим самим title.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
