@@ -12,7 +12,7 @@
   - `entry_parent`: `cf7f58ae4cd37cc5d4c8668b3c155874b7dc21c6`
 - Vulnerable commit: `ef724347b8de56afa44659ec288994bd3fb94694` («Validate create contract; preserve search evidence»).
 - Fixed commit коду: `55177405dfacedb5f28ea3707104029512dc9416`(«Validate incident input and secure search query»).
-- Фінальний тег `v0.2.0` на commit із завершеним звітом: ``
+- Фінальний тег `v0.2.0` на commit із завершеним звітом: `6834d2bc2571026377e461056eb3ee7bb7c4b8fa`
 - DEL-01: URL приватного remote з доступом або ім'я переданого bundle: `https://github.com/d9putat1/lab01`.
 
 ## 2. Контракт і CP-01
