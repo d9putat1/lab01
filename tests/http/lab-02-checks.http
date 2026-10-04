@@ -1,14 +1,21 @@
 @api = http://localhost:5080
 
-### USB — перевірка встановлення
+
+### Пошук за відомим словом (install-check / T-04 regression)
 GET {{api}}/api/incidents/search?q=USB
 
+### Значення, якого немає (B)
+GET {{api}}/api/incidents/search?q=zz-no-match
 
-### Перевірка відомого дефекту (ще НЕ виправляємо!)
+### Легітимний апостроф — ДО виправлення: 500; ПІСЛЯ виправлення (T-04): 200
 GET {{api}}/api/incidents/search?q=O%27Brien
 
 
-### Коректне створення (T-01)
+# =============================================================
+# Контракт створення інциденту 
+# =============================================================
+
+### T-01 — коректне створення (201)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -19,7 +26,7 @@ Content-Type: application/json
   "occurredAtUtc": "2026-01-01T10:00:00Z"
 }
 
-### Некоректний severity "7" (T-02)
+### T-02 — некоректний severity "7" (400, ключ severity)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -30,7 +37,7 @@ Content-Type: application/json
   "occurredAtUtc": "2026-01-01T10:00:00Z"
 }
 
-### Відсутній occurredAtUtc (T-02)
+### T-02 — відсутній occurredAtUtc (400, ключ occurredAtUtc)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -40,7 +47,7 @@ Content-Type: application/json
   "severity": "Low"
 }
 
-### Дата більш ніж на 5 хв у майбутньому (T-02)
+### T-02 — дата більш ніж на 5 хв у майбутньому (400, ключ occurredAtUtc)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -51,7 +58,51 @@ Content-Type: application/json
   "occurredAtUtc": "2099-01-01T00:00:00Z"
 }
 
-### Overposting-проба: зайві поля ігноруються
+### T-10 — власна перевірка: дата старіша за 365 днів (400, ключ occurredAtUtc)
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Занадто стара дата",
+  "description": "Перевірка власного правила T-10.",
+  "severity": "Low",
+  "occurredAtUtc": "2020-01-01T00:00:00Z"
+}
+
+### T-10 — межовий допустимий випадок: рівно 364 дні тому 
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Межа T-10 допустима",
+  "description": "Перевірка межі власного правила.",
+  "severity": "Low",
+  "occurredAtUtc": "{{$datetime iso8601 -364 d}}"
+}
+
+### T-09 — cross-field, 39 символів у description 
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Межа cross-field 39",
+  "description": "012345678901234567890123456789012345678",
+  "severity": "High",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### T-09 — cross-field, 40 символів у description 
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Межа cross-field 40",
+  "description": "0123456789012345678901234567890123456789",
+  "severity": "High",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### Overposting-проба — зайві server-managed поля мають ігноруватись (201 з НОВИМ id, status New)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -65,11 +116,7 @@ Content-Type: application/json
   "id": "11111111-1111-1111-1111-111111111111"
 }
 
-### T-06 — ресурс не знайдено (готовий endpoint з ЛР1)
-GET {{api}}/api/incidents/99999999-9999-9999-9999-999999999999
-
-
-### T-03 — перше створення (201)
+### T-03 — перше створення з унікальним title (201)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -80,7 +127,7 @@ Content-Type: application/json
   "occurredAtUtc": "2026-01-01T10:00:00Z"
 }
 
-### T-03 — повторне створення того самого title (409)
+### T-03 — повторне створення того самого title (409 Conflict)
 POST {{api}}/api/incidents
 Content-Type: application/json
 
@@ -90,3 +137,31 @@ Content-Type: application/json
   "severity": "Low",
   "occurredAtUtc": "2026-01-01T10:00:00Z"
 }
+
+### T-06 — ресурс не знайдено (готовий endpoint з ЛР1, 404 Problem Details)
+GET {{api}}/api/incidents/99999999-9999-9999-9999-999999999999
+
+
+# =============================================================
+# SQL injection: 
+# =============================================================
+
+### S-01/S-02 — контрольний SQLi-ввід. ДО виправлення: 200 з УСІМА записами. ПІСЛЯ (S-02): 200 з []
+GET {{api}}/api/incidents/search?q=zz-no-match%27%20OR%20TRUE%20--%20
+
+### Буквальний пошук одного символу % (після виправлення: 200, [])
+GET {{api}}/api/incidents/search?q=%25
+
+
+# =============================================================
+# sortBy: allowlist 
+# =============================================================
+
+### T-05 — невідоме значення sortBy (400, ключ sortBy)
+GET {{api}}/api/incidents/search?q=USB&sortBy=price
+
+### Сортування за severity (Critical → High → Medium → Low)
+GET {{api}}/api/incidents/search?sortBy=severity
+
+### Сортування за status (New → Triaged → InProgress → Resolved → Closed)
+GET {{api}}/api/incidents/search?sortBy=status

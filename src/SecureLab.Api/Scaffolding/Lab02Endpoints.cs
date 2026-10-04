@@ -9,28 +9,54 @@ public static class Lab02Endpoints
 {
     public static void MapLab02Endpoints(this WebApplication app)
     {
-        app.MapGet("/api/incidents/search", async (string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
+        app.MapGet("/api/incidents/search", async (
+    string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
+{
+    var pattern = "%" + EscapeLike(q ?? "") + "%";
+    var found = db.Incidents.AsNoTracking()
+        .Where(incident =>
+            EF.Functions.ILike(incident.Title, pattern, "\\")
+            || EF.Functions.ILike(incident.Description, pattern, "\\"));
+
+    IQueryable<Incident>? ordered = sortBy switch
+    {
+        null or "" or "createdAtUtc" => found
+            .OrderByDescending(incident => incident.CreatedAtUtc)
+            .ThenBy(incident => incident.Id),
+        "severity" => found
+            .OrderBy(incident => incident.Severity == IncidentSeverity.Critical ? 0
+                : incident.Severity == IncidentSeverity.High ? 1
+                : incident.Severity == IncidentSeverity.Medium ? 2 : 3)
+            .ThenBy(incident => incident.Id),
+        "status" => found
+            .OrderBy(incident => incident.Status == IncidentStatus.New ? 0
+                : incident.Status == IncidentStatus.Triaged ? 1
+                : incident.Status == IncidentStatus.InProgress ? 2
+                : incident.Status == IncidentStatus.Resolved ? 3 : 4)
+            .ThenBy(incident => incident.Id),
+        _ => null
+    };
+
+    if (ordered is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
         {
-            var order = sortBy switch
-            {
-                null or "" or "createdAtUtc" => "created_at_utc DESC",
-                "severity" => "severity", "status" => "status", _ => sortBy
-            };
-            var sql = "SELECT * FROM incidents WHERE title ILIKE '%" + (q ?? "")
-                + "%' OR description ILIKE '%" + (q ?? "") + "%' ORDER BY " + order + " LIMIT 50";
-            var rows = await db.Incidents.FromSqlRaw(sql).AsNoTracking().ToListAsync(ct);
-            return Results.Ok(rows.Select(row => new
-            {
-                row.Id, row.Title, row.Description,
-                Severity = row.Severity.ToString(), Status = row.Status.ToString(), row.CreatedAtUtc
-            }));
+            ["sortBy"] = ["Допустимі значення: createdAtUtc, severity, status."]
         });
+
+    var items = await ordered
+        .Take(50)
+        .Select(incident => new IncidentSearchItemResponse(
+            incident.Id, incident.Title, incident.Description,
+            incident.Severity.ToString(), incident.Status.ToString(), incident.CreatedAtUtc))
+        .ToListAsync(ct);
+
+    return Results.Ok(items);
+});
        app.MapPost("/api/incidents", async (CreateIncidentRequest request, SecureLabDbContext db, CancellationToken ct) =>
 {
     var now = DateTimeOffset.UtcNow;
     var errors = new Dictionary<string, string[]>();
 
-    // 1. Required і довжини — на вхідному значенні, до Trim().
     if (string.IsNullOrWhiteSpace(request.Title))
         errors["title"] = ["Тема обов'язкова."];
     else if (request.Title.Length > 160)
@@ -41,18 +67,18 @@ public static class Lab02Endpoints
     else if (request.Description.Length > 4000)
         errors["description"] = ["Опис не довший за 4000 символів."];
 
-    // 2. Severity: TryParse І IsDefined.
     var severityIsValid =
         Enum.TryParse<IncidentSeverity>(request.Severity, ignoreCase: true, out var severity)
         && Enum.IsDefined(severity);
     if (!severityIsValid)
         errors["severity"] = ["Допустимі значення: Low, Medium, High, Critical."];
 
-    // 3. occurredAtUtc: обов'язковий, не більш ніж на 5 хв у майбутньому.
-    if (request.OccurredAtUtc is null)
-        errors["occurredAtUtc"] = ["Час настання події обов'язковий."];
-    else if (request.OccurredAtUtc > now.AddMinutes(5))
-        errors["occurredAtUtc"] = ["Час настання події не може бути в майбутньому (допуск 5 хв)."];
+   if (request.OccurredAtUtc is null)
+    errors["occurredAtUtc"] = ["Час настання події обов'язковий."];
+else if (request.OccurredAtUtc > now.AddMinutes(5))
+    errors["occurredAtUtc"] = ["Час настання події не може бути в майбутньому (допуск 5 хв)."];
+else if (request.OccurredAtUtc < now.AddDays(-365))
+    errors["occurredAtUtc"] = ["Час настання події не може бути старішим за 365 днів."];
 
     // 4. Нормалізація по одному разу.
     var title = request.Title?.Trim() ?? "";
@@ -108,6 +134,8 @@ public static class Lab02Endpoints
     return Results.Created($"/api/incidents/{incident.Id}", response);
 });
     }
+    private static string EscapeLike(string value) =>
+    value.Replace("\\", "\\\\").Replace("_", "\\_").Replace("%", "\\%");
 }
 
 public sealed record CreateIncidentRequest(
@@ -120,4 +148,12 @@ public sealed record CreatedIncidentResponse(
     string Severity,
     string Status,
     DateTimeOffset OccurredAtUtc,
+    DateTimeOffset CreatedAtUtc);
+
+    public sealed record IncidentSearchItemResponse(
+    Guid Id,
+    string Title,
+    string Description,
+    string Severity,
+    string Status,
     DateTimeOffset CreatedAtUtc);
