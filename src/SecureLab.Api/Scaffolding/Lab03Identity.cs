@@ -35,23 +35,100 @@ public static class Lab03Identity
 
     public static void MapLab03Identity(this WebApplication app)
     {
-        app.MapPost("/api/auth/register", async (RegistrationInput input, UserManager<ApplicationUser> users) =>
-        {
-            // ЛР 03: завершіть DTO validation та перевірки довірчої межі.
-            if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrWhiteSpace(input.Email)
-                || string.IsNullOrWhiteSpace(input.DisplayName) || string.IsNullOrEmpty(input.Password))
-                return Results.BadRequest();
-            var user = new ApplicationUser
+       
+app.MapPost("/api/auth/register", async (
+    RegistrationInput input,
+    UserManager<ApplicationUser> users) =>
+{
+    var errors = new Dictionary<string, string[]>();
+
+    if (string.IsNullOrWhiteSpace(input.UserName))
+        errors["userName"] = ["Ім'я користувача обов'язкове."];
+    else if (input.UserName.Length > 256)
+        errors["userName"] = ["Ім'я користувача не довше за 256 символів."];
+
+    if (string.IsNullOrWhiteSpace(input.Email))
+        errors["email"] = ["Email обов'язковий."];
+    else if (input.Email.Length > 256)
+        errors["email"] = ["Email не довший за 256 символів."];
+
+    if (string.IsNullOrWhiteSpace(input.DisplayName))
+        errors["displayName"] = ["Ім'я для показу обов'язкове."];
+    else if (input.DisplayName.Length > 120)
+        errors["displayName"] = ["Ім'я для показу не довше за 120 символів."];
+
+    if (string.IsNullOrEmpty(input.Password))
+        errors["password"] = ["Пароль обов'язковий."];
+
+    if (errors.Count > 0)
+        return Results.ValidationProblem(errors);
+
+    // Після перевірки явно отримуємо ненульові значення.
+    var userName = input.UserName!.Trim();
+    var email = input.Email!.Trim();
+    var displayName = input.DisplayName!.Trim();
+    var password = input.Password!;
+
+    // Не дозволяємо полям стати порожніми після Trim().
+    if (string.IsNullOrWhiteSpace(userName) ||
+        string.IsNullOrWhiteSpace(email) ||
+        string.IsNullOrWhiteSpace(displayName))
+    {
+        return Results.ValidationProblem(
+            new Dictionary<string, string[]>
             {
-                Id = Guid.NewGuid(), UserName = input.UserName.Trim(), Email = input.Email.Trim(),
-                DisplayName = input.DisplayName.Trim()
-            };
-            var result = await users.CreateAsync(user, input.Password);
-            if (!result.Succeeded) return Results.BadRequest(new { message = "Registration failed" });
-            var role = await users.AddToRoleAsync(user, DbSeeder.ReporterRole);
-            if (!role.Succeeded) throw new InvalidOperationException("Default role assignment failed.");
-            return Results.Created("/api/me", new { user.Id, user.UserName, user.DisplayName });
-        });
+                ["input"] = ["Поля не можуть бути порожніми."]
+            });
+    }
+
+    var user = new ApplicationUser
+    {
+        Id = Guid.NewGuid(),
+        UserName = userName,
+        Email = email,
+        DisplayName = displayName
+    };
+
+    var result = await users.CreateAsync(user, password);
+
+    if (!result.Succeeded)
+    {
+        var codes = result.Errors.Select(e => e.Code).ToArray();
+
+        if (codes.Contains("DuplicateUserName") ||
+            codes.Contains("DuplicateEmail"))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Обліковий запис уже існує",
+                detail: "Користувача з таким іменем або email вже зареєстровано.");
+        }
+
+        return Results.ValidationProblem(
+            new Dictionary<string, string[]>
+            {
+                ["password"] =
+                [
+                    "Пароль не відповідає вимогам Identity."
+                ]
+            });
+    }
+
+    var role = await users.AddToRoleAsync(
+        user,
+        DbSeeder.ReporterRole);
+
+    if (!role.Succeeded)
+        throw new InvalidOperationException(
+            "Default role assignment failed.");
+
+    return Results.Created(
+        "/api/me",
+        new RegisteredUserResponse(
+            user.Id,
+            user.UserName!,
+            user.DisplayName));
+});
         app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn) =>
         {
             if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrEmpty(input.Password))
@@ -75,3 +152,5 @@ public static class Lab03Identity
 
 public sealed record RegistrationInput(string? UserName, string? Email, string? DisplayName, string? Password);
 public sealed record LoginInput(string? UserName, string? Password);
+
+public sealed record RegisteredUserResponse(Guid Id, string UserName, string DisplayName);
