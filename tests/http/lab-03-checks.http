@@ -1,0 +1,21 @@
+@api = http://localhost:5080
+
+### ДЕФЕКТ до виправлення: без cookie, лише заголовок із Guid Bob → 200 і профіль Bob
+GET {{api}}/api/me
+X-Demo-UserId: 10000000-0000-0000-0000-000000000002
+
+### Без заголовка → 501 (заглушка)
+GET {{api}}/api/me
+
+###
+POST /api/incidents
+Content-Type: application/json
+
+{
+  "title": "Перевірка A-05",
+  "description": "Forged owner test.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z",
+  "ownerUserId": "10000000-0000-0000-0000-000000000001"
+}
+
