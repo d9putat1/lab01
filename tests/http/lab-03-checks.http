@@ -1,21 +1,79 @@
 @api = http://localhost:5080
 
-### ДЕФЕКТ до виправлення: без cookie, лише заголовок із Guid Bob → 200 і профіль Bob
-GET {{api}}/api/me
-X-Demo-UserId: 10000000-0000-0000-0000-000000000002
+# Порядок виконання: зверху вниз. Пароль у файл НЕ записується:
+# REST Client сам запитає його у вікні (рядок "# @prompt").
+# Cookie після login REST Client пам'ятає для наступних запитів.
 
-### Без заголовка → 501 (заглушка)
-GET {{api}}/api/me
-
-###
-POST /api/incidents
+### Крок 1 / A-01 — створення БЕЗ входу → очікується 401
+POST {{api}}/api/incidents
 Content-Type: application/json
 
 {
-  "title": "Перевірка A-05",
-  "description": "Forged owner test.",
+  "title": "Anon probe {{$timestamp}}",
+  "description": "Анонімний запит не має створити запис.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### Крок 1 — /api/me БЕЗ входу → очікується 401
+GET {{api}}/api/me
+
+### Крок 4 — /api/me БЕЗ cookie, з X-Demo-UserId = Bob → очікується 401 (дефект усунено)
+GET {{api}}/api/me
+X-Demo-UserId: 10000000-0000-0000-0000-000000000002
+
+### Login як bob → очікується 204
+# @prompt password Пароль користувача bob (SeedUsers__Password)
+POST {{api}}/api/auth/login
+Content-Type: application/json
+
+{
+  "userName": "bob",
+  "password": "{{password}}"
+}
+
+### Крок 3 — /api/me після входу → 200, профіль Bob
+GET {{api}}/api/me
+
+### A-03 — cookie Bob + X-Demo-UserId = Alice → профіль ВСЕ ОДНО Bob
+GET {{api}}/api/me
+X-Demo-UserId: 10000000-0000-0000-0000-000000000001
+
+### A-04 — створення як Bob БЕЗ поля власника → 201
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "A04 owner from principal {{$timestamp}}",
+  "description": "Власника має встановити сервер із principal.",
+  "severity": "Low",
+  "occurredAtUtc": "2026-01-01T10:00:00Z"
+}
+
+### A-05 — створення як Bob з підробленим ownerUserId = Alice → 201, власник у БД = Bob
+POST {{api}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "A05 forged owner {{$timestamp}}",
+  "description": "Підроблений ownerUserId має бути проігнорований.",
   "severity": "Low",
   "occurredAtUtc": "2026-01-01T10:00:00Z",
   "ownerUserId": "10000000-0000-0000-0000-000000000001"
 }
 
+### A-06 — logout → очікується 204
+POST {{api}}/api/auth/logout
+
+### A-06 — /api/me після logout → очікується 401
+GET {{api}}/api/me
+
+
+### Невдалий вхід
+POST http://localhost:5080/api/auth/login
+Content-Type: application/json
+
+{
+  "userName": "unknown-user-a05",
+  "password": "WrongPassword123!"
+}

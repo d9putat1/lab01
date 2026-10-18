@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сценарій сеансу — SecureLab</title>
+</head>
+<body>
+  <h1>Реєстрація, вхід і створення інциденту</h1>
+  <p id="state" role="status">Перевірка стану…</p>
+
+  <section>
+    <h2>1. Реєстрація</h2>
+    <form id="register">
+      <label>Ім'я користувача <input name="userName" required maxlength="256" autocomplete="username"></label><br>
+      <label>Email <input name="email" type="email" required maxlength="256" autocomplete="email"></label><br>
+      <label>Ім'я для показу <input name="displayName" required maxlength="120"></label><br>
+      <label>Пароль <input name="password" type="password" required autocomplete="new-password"></label><br>
+      <button type="submit">Зареєструватися</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>2. Вхід і профіль</h2>
+    <form id="login">
+      <label>Ім'я користувача <input name="userName" required autocomplete="username"></label><br>
+      <label>Пароль <input name="password" type="password" required autocomplete="current-password"></label><br>
+      <button type="submit">Увійти</button>
+    </form>
+    <p id="profile"></p>
+  </section>
+
+  <section>
+    <h2>3. Новий інцидент</h2>
+    <form id="incident">
+      <label>Тема <input name="title" required maxlength="160"></label><br>
+      <label>Опис <textarea name="description" required maxlength="4000"></textarea></label><br>
+      <label>Severity
+        <select name="severity">
+          <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+        </select>
+      </label><br>
+      <label>Час події <input name="occurredAt" type="datetime-local" required></label><br>
+      <button type="submit">Створити</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>4. Вихід</h2>
+    <button id="logout" type="button">Вийти</button>
+    <button id="check-me" type="button">Перевірити /api/me</button>
+  </section>
+
+  <pre id="result"></pre>
+  <script type="module" src="session-flow.js"></script>
+</body>
+</html>

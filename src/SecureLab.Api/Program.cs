@@ -4,6 +4,7 @@ using Scalar.AspNetCore;
 using SecureLab.Api.Application.Incidents;
 using SecureLab.Api.Data;
 using SecureLab.Api.Presentation.Endpoints;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -22,7 +23,19 @@ builder.Services.AddDbContext<SecureLabDbContext>(options =>
 builder.Services.AddScoped<IncidentQueries>();
 
 builder.AddLab03Identity();
-
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 var app = builder.Build();
 
 var resetRequested = args.Contains("--reset-database", StringComparer.Ordinal);
@@ -51,6 +64,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

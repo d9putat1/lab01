@@ -130,13 +130,24 @@ app.MapPost("/api/auth/register", async (
             user.UserName!,
             user.DisplayName));
 });
-        app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn) =>
+               app.MapPost("/api/auth/login", async (
+            LoginInput input,
+            SignInManager<ApplicationUser> signIn,
+            ILogger<Program> logger,
+            HttpContext httpContext) =>
         {
             if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrEmpty(input.Password))
+            {
+                logger.LogInformation("Auth event {EventType}: result {Result}, trace {TraceId}",
+                    "login", "rejected-input", httpContext.TraceIdentifier);
                 return Results.Unauthorized();
+            }
+
             var result = await signIn.PasswordSignInAsync(input.UserName, input.Password, false, false);
+            logger.LogInformation("Auth event {EventType}: result {Result}, trace {TraceId}",
+                "login", result.Succeeded ? "success" : "failure", httpContext.TraceIdentifier);
             return result.Succeeded ? Results.NoContent() : Results.Unauthorized();
-        });
+        }).RequireRateLimiting("login");
          app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signIn) =>
         {
             await signIn.SignOutAsync();

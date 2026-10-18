@@ -11,7 +11,10 @@ public sealed class IncidentCreateAndSearchTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
-
+    private static string StudyPassword =>
+        Environment.GetEnvironmentVariable("SeedUsers__Password")
+        ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
+        
     [Fact]
     public async Task Post_WithInvalidSeverity_Returns400WithSeverityKey()
     {
@@ -22,8 +25,8 @@ public sealed class IncidentCreateAndSearchTests(SecureLabApiFactory factory)
             severity = "7",
             occurredAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10)
         };
-
-        using var response = await _client.PostAsJsonAsync("/api/incidents", body);
+using var client = await factory.LoginAsync("alice", StudyPassword);
+        using var response = await client.PostAsJsonAsync("/api/incidents", body);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("application/problem+json",
@@ -44,13 +47,13 @@ public sealed class IncidentCreateAndSearchTests(SecureLabApiFactory factory)
             severity = "Low",
             occurredAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10)
         };
-
+using var client = await factory.LoginAsync("alice", StudyPassword);
         try
         {
-            using var first = await _client.PostAsJsonAsync("/api/incidents", body);
+            using var first = await client.PostAsJsonAsync("/api/incidents", body);
             Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
-            using var second = await _client.PostAsJsonAsync("/api/incidents", body);
+            using var second = await client.PostAsJsonAsync("/api/incidents", body);
             Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         }
         finally
@@ -106,8 +109,9 @@ public sealed class IncidentCreateAndSearchTests(SecureLabApiFactory factory)
             status = "Closed",
             createdAtUtc = DateTimeOffset.UtcNow.AddYears(-1)
         };
+using var client = await factory.LoginAsync("alice", StudyPassword);
 
-        using var response = await _client.PostAsJsonAsync("/api/incidents", body);
+        using var response = await client.PostAsJsonAsync("/api/incidents", body);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<CreatedIncidentResponse>();
