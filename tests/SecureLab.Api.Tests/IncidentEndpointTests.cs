@@ -6,26 +6,25 @@ using SecureLab.Api.Presentation.Contracts;
 
 namespace SecureLab.Api.Tests;
 
-public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
-    : IClassFixture<SecureLabApiFactory>
+public sealed class IncidentEndpointTests(LoggedInUsersFixture users)
+    : IClassFixture<LoggedInUsersFixture>
 {
-    private readonly HttpClient _client = factory.CreateClient();
-
+    // Було: список містив і Alice, і Bob. За матрицею Reporter бачить лише власні інциденти (A-05).
     [Fact]
-    public async Task GetList_ReturnsSeededIncidents()
+    public async Task GetList_ReturnsOnlyIncidentsAllowedForCurrentUser()
     {
-        var incidents = await _client.GetFromJsonAsync<List<IncidentListItemResponse>>(
+        var incidents = await users.Alice.GetFromJsonAsync<List<IncidentListItemResponse>>(
             "/api/incidents");
 
         Assert.NotNull(incidents);
         Assert.Contains(incidents, incident => incident.Id == DbSeeder.AliceIncidentId);
-        Assert.Contains(incidents, incident => incident.Id == DbSeeder.BobIncidentId);
+        Assert.DoesNotContain(incidents, incident => incident.Id == DbSeeder.BobIncidentId);
     }
 
     [Fact]
     public async Task GetDetails_ForUnknownId_ReturnsProblemDetails404()
     {
-        using var response = await _client.GetAsync($"/api/incidents/{Guid.NewGuid()}");
+        using var response = await users.Alice.GetAsync($"/api/incidents/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -34,7 +33,7 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetDetails_DoesNotExposeInternalOwnerFields()
     {
-        using var response = await _client.GetAsync(
+        using var response = await users.Alice.GetAsync(
             $"/api/incidents/{DbSeeder.AliceIncidentId}");
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
@@ -48,15 +47,18 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task ClientScript_DoesNotUseDangerousInnerHtmlSink()
     {
-        var script = await _client.GetStringAsync("/app.js");
+        // Статичні файли не захищені авторизацією: клієнт вантажиться без login.
+        using var anonymous = users.Factory.CreateClient();
+        var script = await anonymous.GetStringAsync("/app.js");
 
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("textContent", script, StringComparison.Ordinal);
     }
+
     [Fact]
     public async Task GetSeveritySummary_ReturnsFullSeverityList()
     {
-        var summary = await _client.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
+        var summary = await users.Alice.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
             "/api/incidents/severity-summary");
 
         Assert.NotNull(summary);
@@ -67,7 +69,7 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetSeveritySummary_ForInvalidStatus_ReturnsValidationProblem400()
     {
-        using var response = await _client.GetAsync(
+        using var response = await users.Alice.GetAsync(
             "/api/incidents/severity-summary?status=Unknown");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -76,7 +78,7 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetSeveritySummary_FilteredByClosedStatus_AllCountsAreZero()
     {
-        var summary = await _client.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
+        var summary = await users.Alice.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
             "/api/incidents/severity-summary?status=Closed");
 
         Assert.NotNull(summary);

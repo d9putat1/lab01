@@ -1,11 +1,7 @@
 namespace SecureLab.Api.Presentation.Contracts;
 
-// УВАГА: навмисно вразливий контракт для PoC (vulnerable commit).
-// Звичайний update приймає захищені поля: Severity, Status і OwnerUserId.
-// У fixed-стані вони зникнуть.
+// Звичайний update приймає лише content fields. Немає ні Status, ні OwnerUserId, ні Role:
+// клієнт фізично не може їх передати. Зайві поля в JSON мовчки ігноруються (контракт A-08a).
 public sealed record UpdateIncidentRequest(
     string? Title,
-    string? Description,
-    string? Severity,
-    string? Status,
-    Guid? OwnerUserId);
+    string? Description);

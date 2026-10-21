@@ -28,3 +28,16 @@ public sealed record IncidentCommentResponse(
     string Severity,
     int Count);
     
+public sealed record UpdatedIncidentResponse(
+    Guid Id,
+    string Title,
+    string Description,
+    string Severity,
+    string Status,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record TriageIncidentResponse(
+    Guid Id,
+    string Status,
+    DateTimeOffset UpdatedAtUtc);
