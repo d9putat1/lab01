@@ -19,6 +19,8 @@ public static class DbSeeder
     public static readonly Guid BobIncidentId = Guid.Parse("20000000-0000-0000-0000-000000000002");
     public static readonly Guid SafeTextIncidentId = Guid.Parse("20000000-0000-0000-0000-000000000003");
 
+    public static readonly Guid BobIncidentCommentId = Guid.Parse("30000000-0000-0000-0000-000000000002");
+    public static readonly Guid AliceInternalCommentId = Guid.Parse("30000000-0000-0000-0000-000000000003");
     private static readonly Guid ReporterRoleId =
         Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid AnalystRoleId =
@@ -114,7 +116,16 @@ public static class DbSeeder
                 Author = morgan,
                 Text = "Розпочато перевірку журналу автентифікації.",
                 IsInternal = false,
-                CreatedAtUtc = new DateTimeOffset(2026, 8, 2, 14, 40, 0, TimeSpan.Zero)
+                                CreatedAtUtc = new DateTimeOffset(2026, 8, 2, 14, 40, 0, TimeSpan.Zero)
+            },
+            new IncidentComment
+            {
+                Id = AliceInternalCommentId,
+                Incident = aliceIncident,
+                Author = morgan,
+                Text = "Внутрішня нотатка аналітика: заголовки листа вказують на фішинговий домен.",
+                IsInternal = true,
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 9, 45, 0, TimeSpan.Zero)
             });
         dbContext.IncidentStatusHistory.Add(
             new IncidentStatusHistory
