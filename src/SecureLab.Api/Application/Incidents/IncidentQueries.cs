@@ -85,13 +85,19 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    // УВАГА: на цьому етапі (F1) summary ще не обмежено за суб'єктом. Це робиться в Частині 5 (A-11).
+        // A-11: агрегат рахується лише над дозволеною множиною. Умова за суб'єктом стоїть ДО GroupBy:
+    // інакше Alice побачила б кількості чужих інцидентів (side-channel).
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
         IncidentStatus? status,
+        Guid userId,
+        bool canReadAll,
         string traceId,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.Incidents.AsNoTracking();
+        var query = dbContext.Incidents
+            .AsNoTracking()
+            .Where(incident => canReadAll || incident.OwnerUserId == userId);
+
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);

@@ -123,7 +123,7 @@ public static class IncidentEndpoints
         return details is null ? IncidentNotFound() : Results.Ok(details);
     }
 
-    private static async Task<IResult> GetSeveritySummaryAsync(
+       private static async Task<IResult> GetSeveritySummaryAsync(
         string? status,
         IncidentQueries queries,
         HttpContext httpContext,
@@ -144,14 +144,21 @@ public static class IncidentEndpoints
             parsedStatus = candidate;
         }
 
+        if (!IncidentAccessPolicy.TryGetUserId(httpContext.User, out var userId))
+        {
+            return Results.Challenge();
+        }
+
+        var canReadAll = IncidentAccessPolicy.CanReadAll(httpContext.User);
         var summary = await queries.GetSeveritySummaryAsync(
             parsedStatus,
+            userId,
+            canReadAll,
             httpContext.TraceIdentifier,
             cancellationToken);
 
         return Results.Ok(summary);
     }
-
     private static async Task<IResult> UpdateAsync(
         Guid id,
         UpdateIncidentRequest request,

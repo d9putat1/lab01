@@ -74,8 +74,10 @@ public sealed class IncidentAuthorizationTests(LoggedInUsersFixture users)
     [InlineData("/api/incidents/20000000-0000-0000-0000-000000000001")]
     [InlineData("/api/incidents/severity-summary")]
     [InlineData("/api/incident-comments/30000000-0000-0000-0000-000000000002")]
+        [InlineData("/api/incidents/search?q=USB")]
     public async Task ProtectedRead_Anonymous_Returns401_WithoutRedirect(string path)
     {
+        
         using var anonymous = users.Factory.CreateClient(
             new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
@@ -84,6 +86,7 @@ public sealed class IncidentAuthorizationTests(LoggedInUsersFixture users)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(response.Headers.Location);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        
     }
 
     [Theory]

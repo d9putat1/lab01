@@ -10,7 +10,6 @@ namespace SecureLab.Api.Tests;
 public sealed class IncidentCreateAndSearchTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
-    private readonly HttpClient _client = factory.CreateClient();
     private static string StudyPassword =>
         Environment.GetEnvironmentVariable("SeedUsers__Password")
         ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
@@ -64,10 +63,11 @@ using var client = await factory.LoginAsync("alice", StudyPassword);
         }
     }
 
-    [Fact]
+        [Fact]
     public async Task Search_WithSqliControlInput_ReturnsEmptySet()
     {
-        var items = await _client.GetFromJsonAsync<List<IncidentSearchItemResponse>>(
+        using var client = await factory.LoginAsync("alice", StudyPassword);
+        var items = await client.GetFromJsonAsync<List<IncidentSearchItemResponse>>(
             "/api/incidents/search?q=" + Uri.EscapeDataString("zz-no-match' OR TRUE -- "));
 
         Assert.NotNull(items);
@@ -77,7 +77,8 @@ using var client = await factory.LoginAsync("alice", StudyPassword);
     [Fact]
     public async Task Search_WithUsbQuery_ReturnsExactlyOneKnownRecord()
     {
-        var items = await _client.GetFromJsonAsync<List<IncidentSearchItemResponse>>(
+        using var client = await factory.LoginAsync("alice", StudyPassword);
+        var items = await client.GetFromJsonAsync<List<IncidentSearchItemResponse>>(
             "/api/incidents/search?q=USB");
 
         Assert.NotNull(items);
@@ -88,7 +89,8 @@ using var client = await factory.LoginAsync("alice", StudyPassword);
     [Fact]
     public async Task Search_WithUnknownSortBy_Returns400()
     {
-        using var response = await _client.GetAsync(
+        using var client = await factory.LoginAsync("alice", StudyPassword);
+        using var response = await client.GetAsync(
             "/api/incidents/search?q=USB&sortBy=price");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

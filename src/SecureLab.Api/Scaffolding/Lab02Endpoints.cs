@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using System.Security.Claims;
+using SecureLab.Api.Application.Incidents;
 namespace SecureLab.Api.Scaffolding;
 
 // Навчальний старт ЛР 02. Запускати лише з локальними штучними даними.
@@ -10,10 +11,18 @@ public static class Lab02Endpoints
     public static void MapLab02Endpoints(this WebApplication app)
     {
         app.MapGet("/api/incidents/search", async (
-    string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
+        string? q, string? sortBy, HttpContext httpContext, SecureLabDbContext db, CancellationToken ct) =>
 {
+    // A-11: суб'єкт і його видимість — з principal; умова входить у запит ДО сортування і Take(50).
+    if (!IncidentAccessPolicy.TryGetUserId(httpContext.User, out var userId))
+    {
+        return Results.Challenge();
+    }
+
+    var canReadAll = IncidentAccessPolicy.CanReadAll(httpContext.User);
     var pattern = "%" + EscapeLike(q ?? "") + "%";
     var found = db.Incidents.AsNoTracking()
+        .Where(incident => canReadAll || incident.OwnerUserId == userId)
         .Where(incident =>
             EF.Functions.ILike(incident.Title, pattern, "\\")
             || EF.Functions.ILike(incident.Description, pattern, "\\"));
@@ -50,8 +59,8 @@ public static class Lab02Endpoints
             incident.Severity.ToString(), incident.Status.ToString(), incident.CreatedAtUtc))
         .ToListAsync(ct);
 
-    return Results.Ok(items);
-});
+        return Results.Ok(items);
+}).RequireAuthorization();
        app.MapPost("/api/incidents", async (CreateIncidentRequest request, SecureLabDbContext db, HttpContext httpContext, CancellationToken ct) =>
        {
     var now = DateTimeOffset.UtcNow;
