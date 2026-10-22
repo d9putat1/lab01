@@ -443,7 +443,30 @@ public sealed class IncidentAuthorizationTests(LoggedInUsersFixture users)
             await DeleteByIdAsync(id);
         }
     }
+    // A-08a (severity): Reporter не може підняти пріоритет власного інциденту звичайним update.
+    [Fact]
+    public async Task Update_WithForgedSeverity_DoesNotEscalateIncident()
+    {
+        var id = await CreateIncidentAsync(users.Alice, $"A08S-{Guid.NewGuid():N}");
+        try
+        {
+            using var response = await users.Alice.PutAsJsonAsync($"/api/incidents/{id}", new
+            {
+                title = $"A08S-edited-{Guid.NewGuid():N}",
+                description = "x",
+                severity = "Critical"
+            });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
+            var after = await ReadDetailsAsync(users.Alice, id);
+            Assert.Equal("Low", after["severity"]!.GetValue<string>());
+            Assert.Equal("New", after["status"]!.GetValue<string>());
+        }
+        finally
+        {
+            await DeleteByIdAsync(id);
+        }
+    }
     // ---------- A-10: чужий і неіснуючий id нерозрізнювані (політика 404) ----------
 
     [Fact]

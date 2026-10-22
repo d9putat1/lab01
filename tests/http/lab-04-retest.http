@@ -7,12 +7,18 @@
 @bobCommentId = 30000000-0000-0000-0000-000000000002
 @internalCommentId = 30000000-0000-0000-0000-000000000003
 
+# Fixed-стан. Порядок зверху вниз. Після прогону зробіть --reset-database (triage змінює дані).
+
 ############################################################
 ### Alice login → 204
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 { "userName": "alice", "password": "{{$processEnv SeedUsers__Password}}" }
+
+### A-02 Alice → власний інцидент → 200
+GET {{host}}/api/incidents/{{aliceId}}
+Accept: application/json
 
 ### A-10 пара (1/2): Alice → ЧУЖИЙ існуючий id → 404
 GET {{host}}/api/incidents/{{bobId}}
@@ -22,8 +28,49 @@ Accept: application/json
 GET {{host}}/api/incidents/{{unknownId}}
 Accept: application/json
 
+### A-05: list Alice → лише власні (…0001, …0003, …0005)
+GET {{host}}/api/incidents
+Accept: application/json
+
+### A-04: Alice PUT чужого інциденту → 404
+PUT {{host}}/api/incidents/{{bobId}}
+Content-Type: application/json
+
+{ "title": "x", "description": "y" }
+
+### A-04: Alice PUT неіснуючого (те саме тіло) → 404, ідентична відповідь
+PUT {{host}}/api/incidents/{{unknownId}}
+Content-Type: application/json
+
+{ "title": "x", "description": "y" }
+
+### A-04: Alice DELETE чужого → 404
+DELETE {{host}}/api/incidents/{{bobNewId}}
+
 ### A-06/A-09: Alice (Reporter) → triage власного New-інциденту → 403 + audit-рядок у терміналі API
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
+
+### A-06 state: статус власного інциденту лишився New
+GET {{host}}/api/incidents/{{aliceNewId}}
+Accept: application/json
+
+### A-08a: forged severity/status/owner/role у звичайному update → 200, protected state без змін
+PUT {{host}}/api/incidents/{{aliceId}}
+Content-Type: application/json
+
+{
+  "title": "Alice content edit",
+  "description": "Дозволена зміна опису власником інциденту, який уже опрацьовано.",
+  "severity": "Critical",
+  "status": "Resolved",
+  "ownerUserId": "10000000-0000-0000-0000-000000000002",
+  "role": "Administrator",
+  "isTransitionAllowed": true
+}
+
+### A-08a state: title змінився; severity=Medium, status=Triaged, власник Аліса
+GET {{host}}/api/incidents/{{aliceId}}
+Accept: application/json
 
 ### A-12: internal comment для Alice (власник інциденту) → 404
 GET {{host}}/api/incident-comments/{{internalCommentId}}
@@ -31,15 +78,24 @@ GET {{host}}/api/incident-comments/{{internalCommentId}}
 ### A-12: коментар до інциденту Bob за прямим id → 404
 GET {{host}}/api/incident-comments/{{bobCommentId}}
 
-### Деталі власного інциденту Alice: у comments лише публічний comment-1, internal немає
+### A-12 details: у comments власного інциденту Alice немає internal comment-3
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
-### Alice: update ЧУЖОГО інциденту → 404 (і така сама для неіснуючого)
-PUT {{host}}/api/incidents/{{bobId}}
+############################################################
+### Bob login → 204
+POST {{host}}/api/auth/login
 Content-Type: application/json
 
-{ "title": "x", "description": "y" }
+{ "userName": "bob", "password": "{{$processEnv SeedUsers__Password}}" }
+
+### Bob → інцидент Alice → 404
+GET {{host}}/api/incidents/{{aliceNewId}}
+Accept: application/json
+
+### Bob: власний інцидент → 200 (позитивна регресія)
+GET {{host}}/api/incidents/{{bobId}}
+Accept: application/json
 
 ############################################################
 ### Morgan login (Analyst) → 204
@@ -49,14 +105,14 @@ Content-Type: application/json
 { "userName": "morgan", "password": "{{$processEnv SeedUsers__Password}}" }
 
 ### A-03R: Morgan → details інциденту Alice → 200
-GET {{host}}/api/incidents/{{aliceId}}
+GET {{host}}/api/incidents/{{aliceNewId}}
 Accept: application/json
 
 ### A-03R: Morgan → details інциденту Bob → 200
 GET {{host}}/api/incidents/{{bobId}}
 Accept: application/json
 
-### A-12: Morgan бачить internal comment у details (comments містить comment-3)
+### A-12: Morgan бачить internal comment у details інциденту Alice (comments містить comment-3)
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
@@ -64,18 +120,18 @@ Accept: application/json
 GET {{host}}/api/incident-comments/{{internalCommentId}}
 
 ### A-03R без права довільної mutation: Morgan → PUT інциденту Alice → 403
-PUT {{host}}/api/incidents/{{aliceId}}
+PUT {{host}}/api/incidents/{{aliceNewId}}
 Content-Type: application/json
 
 { "title": "analyst edit", "description": "Analyst не має права змінювати вміст." }
 
 ### A-03R: Morgan → DELETE інциденту Alice → 403
-DELETE {{host}}/api/incidents/{{aliceId}}
+DELETE {{host}}/api/incidents/{{aliceNewId}}
 
 ### A-07: Morgan → triage інциденту Alice …0003 (New) → 200, status Triaged
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
 
-### Повторний triage того самого → 409 (допустимий лише New → Triaged)
+### Повторний triage → 409 (допустимий лише New → Triaged)
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
 
 ### Morgan → triage інциденту Bob (InProgress) → 409
@@ -92,7 +148,7 @@ Content-Type: application/json
 
 { "userName": "admin", "password": "{{$processEnv SeedUsers__Password}}" }
 
-### Least privilege: Admin → чужий інцидент → 404 (немає автоматичного обходу ownership)
+### Least privilege: Admin → чужий інцидент → 404 (немає обходу ownership)
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
