@@ -104,8 +104,7 @@ Least privilege: Reporter — тільки власне; Analyst — читан�
 Середовище: ⟦Windows ‹версія›⟧, .NET SDK ⟦dotnet --version⟧, PostgreSQL ⟦версія образу з infra/compose.yaml⟧.
 Команди: `docker compose --env-file infra/.env.example -f infra/compose.yaml up -d --wait`; `dotnet run --project src/SecureLab.Api -- --reset-database`; `dotnet test tests/SecureLab.Api.Tests/SecureLab.Api.Tests.csproj --configuration Release`; `dotnet run --project src/SecureLab.Api --launch-profile http`.
 Фактично: Passed ⟦N⟧, Failed ⟦0⟧, Skipped ⟦S⟧ (⟦дата⟧); ручний прогін `lab-04-access.http` (vulnerable) та `lab-04-retest.http` (fixed) — ⟦збігається з очікуваним⟧.
-Hash-і: base `v0.3.0` = `2fc1306fbf3a77c4502f8a775d57b827c1c21006`; C1 `eceb51ce0ac44af48f472ac1f47d5d2c0886282a`; C2 `cff86ede3c1afdec9460266ab8421fc360970b70`; vulnerable V = `239a6709aaf66fabdf2bfd0c2da918f454819eaa`; F1 = `8b37a3eb874dfe5d52d2a9fc4528371abc2b2bb7`; E = `⟦hash E⟧`; fixed F2 = `⟦hash F2⟧` = `git rev-parse "v0.4.0^{commit}"` (вписано окремим commit-ом після тегу).
+Hash-і: base `v0.3.0` = `2fc1306fbf3a77c4502f8a775d57b827c1c21006`; C1 `eceb51ce0ac44af48f472ac1f47d5d2c0886282a`; C2 `cff86ede3c1afdec9460266ab8421fc360970b70`; vulnerable V = `239a6709aaf66fabdf2bfd0c2da918f454819eaa`; F1 = `8b37a3eb874dfe5d52d2a9fc4528371abc2b2bb7`; E = `⟦hash E⟧`; fixed F2 = `e93897e379a324ecb22ea88b2a2ca3d286ba69d4` 
 Посилання: ⟦private remote / MR⟧; Moodle: той самий `docs/report-lab-04.md`.
-Невиконані необов'язкові перевірки/обмеження: A-08b (обрано A-08a); ⟦автоматичний тест аудиту стабільний / замінено ручним доказом⟧; код зібрано й запущено лише локально.
 
 
