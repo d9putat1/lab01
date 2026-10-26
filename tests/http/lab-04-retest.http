@@ -155,3 +155,14 @@ Accept: application/json
 ### Admin: list → порожній (власних інцидентів у seed немає)
 GET {{host}}/api/incidents
 Accept: application/json
+
+### A-11: Morgan summary → усі інциденти (High 1, Medium 1, Low 3)
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+### A-11: Morgan search → бачить інцидент Bob
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+### A-11 позитивна регресія: Bob search → власний …0004
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
