@@ -63,7 +63,7 @@ using var client = await factory.LoginAsync("alice", StudyPassword);
         }
     }
 
-        [Fact]
+    [Fact]
     public async Task Search_WithSqliControlInput_ReturnsEmptySet()
     {
         using var client = await factory.LoginAsync("alice", StudyPassword);

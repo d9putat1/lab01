@@ -5,7 +5,7 @@ using SecureLab.Api.Scaffolding;
 
 namespace SecureLab.Api.Tests;
 
-// A-11: власні endpoint-и ЛР 1–2 (search, severity-summary) обмежені дозволеною множиною.
+// A-11: власні endpoint-и ЛР 1-2 (search, severity-summary) обмежені дозволеною множиною.
 public sealed class SearchAndSummaryScopingTests(LoggedInUsersFixture users)
     : IClassFixture<LoggedInUsersFixture>
 {
@@ -71,7 +71,7 @@ public sealed class SearchAndSummaryScopingTests(LoggedInUsersFixture users)
         Assert.NotNull(own);
         Assert.NotNull(summary);
         Assert.Equal(own.Count, summary.Sum(item => item.Count));
-        // Після reset Alice не має High; один High належить Bob і в її агрегат не потрапляє.
+        // Після reset Alice не має High; єдиний High належить Bob і в її агрегат не потрапляє.
         Assert.Equal(0, summary.Single(item => item.Severity == "High").Count);
     }
 

@@ -85,7 +85,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-        // A-11: агрегат рахується лише над дозволеною множиною. Умова за суб'єктом стоїть ДО GroupBy:
+    // A-11: агрегат рахується лише над дозволеною множиною. Умова за суб'єктом стоїть ДО GroupBy:
     // інакше Alice побачила б кількості чужих інцидентів (side-channel).
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
         IncidentStatus? status,

@@ -123,7 +123,7 @@ public static class IncidentEndpoints
         return details is null ? IncidentNotFound() : Results.Ok(details);
     }
 
-       private static async Task<IResult> GetSeveritySummaryAsync(
+    private static async Task<IResult> GetSeveritySummaryAsync(
         string? status,
         IncidentQueries queries,
         HttpContext httpContext,
@@ -159,6 +159,7 @@ public static class IncidentEndpoints
 
         return Results.Ok(summary);
     }
+
     private static async Task<IResult> UpdateAsync(
         Guid id,
         UpdateIncidentRequest request,

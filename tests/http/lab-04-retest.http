@@ -7,54 +7,79 @@
 @bobCommentId = 30000000-0000-0000-0000-000000000002
 @internalCommentId = 30000000-0000-0000-0000-000000000003
 
-# Fixed-стан. Порядок зверху вниз. Після прогону зробіть --reset-database (triage змінює дані).
+# Fixed-стан. Порядок зверху вниз. Після прогону зробіть --reset-database (triage і PUT змінюють дані).
+# Пароль береться зі змінної SeedUsers__Password: VS Code треба запускати з термінала, де вона задана.
 
 ############################################################
-### Alice login → 204
+### Анонімні запити (спершу logout: 401 нормально, якщо cookie ще немає)
+POST {{host}}/api/auth/logout
+
+### A-01 анонім: details -> 401
+GET {{host}}/api/incidents/{{bobId}}
+Accept: application/json
+
+### A-01/A-11 анонім: search -> 401
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
+### A-01/A-11 анонім: severity-summary -> 401
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+############################################################
+### Alice login -> 204
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 { "userName": "alice", "password": "{{$processEnv SeedUsers__Password}}" }
 
-### A-02 Alice → власний інцидент → 200
+### A-02 Alice -> власний інцидент -> 200
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
-### A-10 пара (1/2): Alice → ЧУЖИЙ існуючий id → 404
+### A-03 / A-10 (1/2): Alice -> ЧУЖИЙ існуючий id -> 404
 GET {{host}}/api/incidents/{{bobId}}
 Accept: application/json
 
-### A-10 пара (2/2): Alice → НЕІСНУЮЧИЙ id → 404, те саме тіло (відрізняється лише traceId)
+### A-10 (2/2): Alice -> НЕІСНУЮЧИЙ id -> 404, те саме тіло (відрізняється лише traceId)
 GET {{host}}/api/incidents/{{unknownId}}
 Accept: application/json
 
-### A-05: list Alice → лише власні (…0001, …0003, …0005)
+### A-05: list Alice -> лише власні (...0001, ...0003, ...0005)
 GET {{host}}/api/incidents
 Accept: application/json
 
-### A-04: Alice PUT чужого інциденту → 404
+### A-11: Alice search O'Brien -> [] (інцидент Bob не видно)
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
+### A-11: Alice severity-summary -> Critical 0, High 0, Medium 1, Low 2
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+### A-04: Alice PUT чужого інциденту -> 404
 PUT {{host}}/api/incidents/{{bobId}}
 Content-Type: application/json
 
 { "title": "x", "description": "y" }
 
-### A-04: Alice PUT неіснуючого (те саме тіло) → 404, ідентична відповідь
+### A-10: Alice PUT неіснуючого (те саме тіло) -> 404, ідентична відповідь
 PUT {{host}}/api/incidents/{{unknownId}}
 Content-Type: application/json
 
 { "title": "x", "description": "y" }
 
-### A-04: Alice DELETE чужого → 404
+### A-04: Alice DELETE чужого -> 404
 DELETE {{host}}/api/incidents/{{bobNewId}}
 
-### A-06/A-09: Alice (Reporter) → triage власного New-інциденту → 403 + audit-рядок у терміналі API
+### A-06/A-09: Alice (Reporter) -> triage власного New-інциденту -> 403 + рядок authorization.denied у терміналі API
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
 
 ### A-06 state: статус власного інциденту лишився New
 GET {{host}}/api/incidents/{{aliceNewId}}
 Accept: application/json
 
-### A-08a: forged severity/status/owner/role у звичайному update → 200, protected state без змін
+### A-08a: forged severity/status/owner/role у звичайному update -> 200, protected state без змін
 PUT {{host}}/api/incidents/{{aliceId}}
 Content-Type: application/json
 
@@ -68,14 +93,14 @@ Content-Type: application/json
   "isTransitionAllowed": true
 }
 
-### A-08a state: title змінився; severity=Medium, status=Triaged, власник Аліса
+### A-08a state: title змінився; severity=Medium, status=Triaged, власник Аліса Коваль
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
-### A-12: internal comment для Alice (власник інциденту) → 404
+### A-12: internal comment для Alice (власник інциденту) -> 404
 GET {{host}}/api/incident-comments/{{internalCommentId}}
 
-### A-12: коментар до інциденту Bob за прямим id → 404
+### A-12: коментар до інциденту Bob за прямим id -> 404
 GET {{host}}/api/incident-comments/{{bobCommentId}}
 
 ### A-12 details: у comments власного інциденту Alice немає internal comment-3
@@ -83,32 +108,36 @@ GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
 ############################################################
-### Bob login → 204
+### Bob login -> 204
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 { "userName": "bob", "password": "{{$processEnv SeedUsers__Password}}" }
 
-### Bob → інцидент Alice → 404
+### Bob -> інцидент Alice -> 404
 GET {{host}}/api/incidents/{{aliceNewId}}
 Accept: application/json
 
-### Bob: власний інцидент → 200 (позитивна регресія)
+### Bob: власний інцидент -> 200 (позитивна регресія)
 GET {{host}}/api/incidents/{{bobId}}
 Accept: application/json
 
+### A-11 позитивна регресія: Bob search O'Brien -> власний ...0004
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
 ############################################################
-### Morgan login (Analyst) → 204
+### Morgan login (Analyst) -> 204
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 { "userName": "morgan", "password": "{{$processEnv SeedUsers__Password}}" }
 
-### A-03R: Morgan → details інциденту Alice → 200
+### A-03R: Morgan -> details інциденту Alice -> 200
 GET {{host}}/api/incidents/{{aliceNewId}}
 Accept: application/json
 
-### A-03R: Morgan → details інциденту Bob → 200
+### A-03R: Morgan -> details інциденту Bob -> 200
 GET {{host}}/api/incidents/{{bobId}}
 Accept: application/json
 
@@ -116,53 +145,54 @@ Accept: application/json
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
-### A-12: Morgan → прямий child internal comment → 200
+### A-12: Morgan -> прямий child internal comment -> 200
 GET {{host}}/api/incident-comments/{{internalCommentId}}
 
-### A-03R без права довільної mutation: Morgan → PUT інциденту Alice → 403
+### A-03R без права довільної mutation: Morgan -> PUT інциденту Alice -> 403
 PUT {{host}}/api/incidents/{{aliceNewId}}
 Content-Type: application/json
 
 { "title": "analyst edit", "description": "Analyst не має права змінювати вміст." }
 
-### A-03R: Morgan → DELETE інциденту Alice → 403
+### A-03R: Morgan -> DELETE інциденту Alice -> 403
 DELETE {{host}}/api/incidents/{{aliceNewId}}
 
-### A-07: Morgan → triage інциденту Alice …0003 (New) → 200, status Triaged
+### A-07: Morgan -> triage інциденту Alice ...0003 (New) -> 200, status Triaged
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
 
-### Повторний triage → 409 (допустимий лише New → Triaged)
+### Повторний triage -> 409 (допустимий лише New -> Triaged)
 POST {{host}}/api/incidents/{{aliceNewId}}/triage
 
-### Morgan → triage інциденту Bob (InProgress) → 409
+### Morgan -> triage інциденту Bob (InProgress) -> 409
 POST {{host}}/api/incidents/{{bobId}}/triage
 
 ### A-05 для Analyst: list містить інциденти обох власників
 GET {{host}}/api/incidents
 Accept: application/json
 
+### A-11: Morgan search O'Brien -> бачить інцидент Bob
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
+### A-11: Morgan severity-summary -> усі інциденти (High 1, Medium 1, Low 3)
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
 ############################################################
-### Admin login → 204
+### Admin login -> 204
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 { "userName": "admin", "password": "{{$processEnv SeedUsers__Password}}" }
 
-### Least privilege: Admin → чужий інцидент → 404 (немає обходу ownership)
+### Least privilege: Admin -> чужий інцидент -> 404 (немає обходу ownership)
 GET {{host}}/api/incidents/{{aliceId}}
 Accept: application/json
 
-### Admin: list → порожній (власних інцидентів у seed немає)
+### Admin: list -> порожній (власних інцидентів у seed немає)
 GET {{host}}/api/incidents
 Accept: application/json
 
-### A-11: Morgan summary → усі інциденти (High 1, Medium 1, Low 3)
-GET {{host}}/api/incidents/severity-summary
-Accept: application/json
-
-### A-11: Morgan search → бачить інцидент Bob
-GET {{host}}/api/incidents/search?q=O%27Brien
-Accept: application/json
-### A-11 позитивна регресія: Bob search → власний …0004
-GET {{host}}/api/incidents/search?q=O%27Brien
+### Admin: search USB -> []
+GET {{host}}/api/incidents/search?q=USB
 Accept: application/json
