@@ -1,0 +1,6 @@
+{
+  "release": "lab-05-start-v1",
+  "inherits": "v0.4.0",
+  "base_commit": "645826f48ea06981c8a9c6e095562c2091f40b38",
+  "entry_parent": "645826f48ea06981c8a9c6e095562c2091f40b38"
+}
