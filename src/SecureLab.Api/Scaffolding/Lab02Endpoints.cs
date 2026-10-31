@@ -19,10 +19,10 @@ public static class Lab02Endpoints
         return Results.Challenge();
     }
 
-    var canReadAll = IncidentAccessPolicy.CanReadAll(httpContext.User);
+   var canReadAll = IncidentAccessPolicy.CanReadAll(httpContext.User);
     var pattern = "%" + EscapeLike(q ?? "") + "%";
     var found = db.Incidents.AsNoTracking()
-        .Where(incident => canReadAll || incident.OwnerUserId == userId)
+        .Where(IncidentReadScope.BySubject(userId, canReadAll))
         .Where(incident =>
             EF.Functions.ILike(incident.Title, pattern, "\\")
             || EF.Functions.ILike(incident.Description, pattern, "\\"));

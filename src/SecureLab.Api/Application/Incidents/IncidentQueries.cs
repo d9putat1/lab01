@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
@@ -5,10 +6,14 @@ using SecureLab.Api.Presentation.Contracts;
 
 namespace SecureLab.Api.Application.Incidents;
 
+public static class IncidentReadScope
+{   
+    public static Expression<Func<Incident, bool>> BySubject(Guid userId, bool canReadAll) =>
+        incident => canReadAll || incident.OwnerUserId == userId;
+}
+
 public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<IncidentQueries> logger)
 {
-    // Query scoping: умова за суб'єктом стоїть у самому запиті, заборонені рядки не завантажуються.
-    // userId і canReadAll передає endpoint (з principal); IHttpContextAccessor тут не використовується.
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
         IncidentStatus? status,
         Guid userId,
@@ -19,7 +24,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 
         var query = dbContext.Incidents
             .AsNoTracking()
-            .Where(incident => canReadAll || incident.OwnerUserId == userId);
+            .Where(IncidentReadScope.BySubject(userId, canReadAll));
 
         if (status is not null)
         {
@@ -38,13 +43,11 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    // Лише для рішення авторизації: entity (з OwnerUserId і Status) не виходить за межі сервера.
     public Task<Incident?> FindForDecisionAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.Incidents
             .AsNoTracking()
             .SingleOrDefaultAsync(incident => incident.Id == id, cancellationToken);
 
-    // Child завжди завантажується разом із parent, щоб рішення ухвалювалось для батьківського інциденту.
     public Task<IncidentComment?> FindCommentForDecisionAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.IncidentComments
             .AsNoTracking()
@@ -52,8 +55,6 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .Include(comment => comment.Author)
             .SingleOrDefaultAsync(comment => comment.Id == id, cancellationToken);
 
-    // Викликається ЛИШЕ після того, як handler дозволив Read. Видимість internal comments
-    // залежить від рішення авторизації (ReadInternalComments), а не безумовно приховується.
     public Task<IncidentDetailsResponse?> GetDetailsAsync(
         Guid id,
         bool includeInternalComments,
@@ -85,8 +86,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    // A-11: агрегат рахується лише над дозволеною множиною. Умова за суб'єктом стоїть ДО GroupBy:
-    // інакше Alice побачила б кількості чужих інцидентів (side-channel).
+    // A-11 (Call site 2): спільний Expression-helper стоїть ДО фільтра status і ДО GroupBy.
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
         IncidentStatus? status,
         Guid userId,
@@ -96,13 +96,13 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
     {
         var query = dbContext.Incidents
             .AsNoTracking()
-            .Where(incident => canReadAll || incident.OwnerUserId == userId);
+            .Where(IncidentReadScope.BySubject(userId, canReadAll));
 
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
         }
-
+logger.LogInformation("SQL Proof (A-11 Summary):\n{Sql}", query.ToQueryString());
         var counts = await query
             .GroupBy(incident => incident.Severity)
             .Select(group => new { Severity = group.Key, Count = group.Count() })
