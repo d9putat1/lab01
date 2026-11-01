@@ -99,6 +99,10 @@ public static class DbSeeder
         };
 
         dbContext.Incidents.AddRange(aliceIncident, bobIncident, safeTextIncident);
+        const string Lab05Marker =
+    "<img src=x onerror=\""
+    + "document.querySelector('#lab05-marker-target')"
+    + ".setAttribute('data-lab05-marker','executed')\">";
         dbContext.IncidentComments.AddRange(
             new IncidentComment
             {
@@ -125,7 +129,16 @@ public static class DbSeeder
                 Author = morgan,
                 Text = "Внутрішня нотатка аналітика: заголовки листа вказують на фішинговий домен.",
                 IsInternal = true,
-                CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 9, 45, 0, TimeSpan.Zero)
+                               CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 9, 45, 0, TimeSpan.Zero)
+            },
+            new IncidentComment
+            {
+                Id = Guid.Parse("30000000-0000-0000-0000-000000000005"),
+                Incident = aliceIncident,
+                Author = morgan,
+                Text = Lab05Marker,
+                IsInternal = false,
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 9, 35, 0, TimeSpan.Zero)
             });
         dbContext.IncidentStatusHistory.Add(
             new IncidentStatusHistory
