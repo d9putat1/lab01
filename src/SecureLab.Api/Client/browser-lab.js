@@ -1,18 +1,24 @@
 let current;
 const id = () => encodeURIComponent(document.querySelector("#incident-id").value.trim());
 const status = document.querySelector("#status");
+
+function renderText(element, value) {
+  element.textContent = value ?? "";
+  return element;
+}
+
 async function load() {
   const response = await fetch(`/api/incidents/${id()}`);
   status.textContent = `GET: ${response.status}`;
   if (!response.ok) return;
   current = await response.json();
   document.querySelector("#title").textContent = current.title;
-  document.querySelector("#description").innerHTML = current.description;
-  document.querySelector("#comments").replaceChildren();
+  renderText(document.querySelector("#description"), current.description);
+
+  const commentsBox = document.querySelector("#comments");
+  commentsBox.replaceChildren();
   for (const comment of current.comments ?? []) {
-    const paragraph = document.createElement("p");
-    paragraph.innerHTML = comment.text;
-    document.querySelector("#comments").append(paragraph);
+    commentsBox.append(renderText(document.createElement("p"), comment.text));
   }
   document.querySelector("#edit").elements.description.value = current.description;
 }
