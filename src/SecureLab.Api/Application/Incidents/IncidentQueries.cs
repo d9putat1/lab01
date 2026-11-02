@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
@@ -5,15 +6,26 @@ using SecureLab.Api.Presentation.Contracts;
 
 namespace SecureLab.Api.Application.Incidents;
 
+public static class IncidentReadScope
+{   
+    public static Expression<Func<Incident, bool>> BySubject(Guid userId, bool canReadAll) =>
+        incident => canReadAll || incident.OwnerUserId == userId;
+}
+
 public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<IncidentQueries> logger)
 {
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
         IncidentStatus? status,
+        Guid userId,
+        bool canReadAll,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incidents with status filter {Status}", status);
 
-        var query = dbContext.Incidents.AsNoTracking();
+        var query = dbContext.Incidents
+            .AsNoTracking()
+            .Where(IncidentReadScope.BySubject(userId, canReadAll));
+
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
@@ -31,7 +43,22 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
+    public Task<Incident?> FindForDecisionAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Incidents
+            .AsNoTracking()
+            .SingleOrDefaultAsync(incident => incident.Id == id, cancellationToken);
+
+    public Task<IncidentComment?> FindCommentForDecisionAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.IncidentComments
+            .AsNoTracking()
+            .Include(comment => comment.Incident)
+            .Include(comment => comment.Author)
+            .SingleOrDefaultAsync(comment => comment.Id == id, cancellationToken);
+
+    public Task<IncidentDetailsResponse?> GetDetailsAsync(
+        Guid id,
+        bool includeInternalComments,
+        CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incident {IncidentId}", id);
 
@@ -48,7 +75,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                 incident.CreatedAtUtc,
                 incident.Owner.DisplayName,
                 incident.Comments
-                    .Where(comment => !comment.IsInternal)
+                    .Where(comment => includeInternalComments || !comment.IsInternal)
                     .OrderBy(comment => comment.CreatedAtUtc)
                     .Select(comment => new IncidentCommentResponse(
                         comment.Id,
@@ -58,18 +85,24 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
     }
-    
+
+    // A-11 (Call site 2): спільний Expression-helper стоїть ДО фільтра status і ДО GroupBy.
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
         IncidentStatus? status,
+        Guid userId,
+        bool canReadAll,
         string traceId,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.Incidents.AsNoTracking();
+        var query = dbContext.Incidents
+            .AsNoTracking()
+            .Where(IncidentReadScope.BySubject(userId, canReadAll));
+
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
         }
-
+logger.LogInformation("SQL Proof (A-11 Summary):\n{Sql}", query.ToQueryString());
         var counts = await query
             .GroupBy(incident => incident.Severity)
             .Select(group => new { Severity = group.Key, Count = group.Count() })

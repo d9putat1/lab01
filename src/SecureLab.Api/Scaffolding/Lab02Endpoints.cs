@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using SecureLab.Api.Application.Incidents;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
-
+using System.Security.Claims;
 namespace SecureLab.Api.Scaffolding;
 
 // Навчальний старт ЛР 02. Запускати лише з локальними штучними даними.
@@ -10,10 +11,18 @@ public static class Lab02Endpoints
     public static void MapLab02Endpoints(this WebApplication app)
     {
         app.MapGet("/api/incidents/search", async (
-    string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
+    string? q, string? sortBy, HttpContext httpContext, SecureLabDbContext db, CancellationToken ct) =>
 {
+    // A-11: суб'єкт і його видимість - з principal; умова входить у запит ДО сортування і Take(50).
+    if (!IncidentAccessPolicy.TryGetUserId(httpContext.User, out var userId))
+    {
+        return Results.Challenge();
+    }
+
+   var canReadAll = IncidentAccessPolicy.CanReadAll(httpContext.User);
     var pattern = "%" + EscapeLike(q ?? "") + "%";
     var found = db.Incidents.AsNoTracking()
+        .Where(IncidentReadScope.BySubject(userId, canReadAll))
         .Where(incident =>
             EF.Functions.ILike(incident.Title, pattern, "\\")
             || EF.Functions.ILike(incident.Description, pattern, "\\"));
@@ -51,9 +60,9 @@ public static class Lab02Endpoints
         .ToListAsync(ct);
 
     return Results.Ok(items);
-});
-       app.MapPost("/api/incidents", async (CreateIncidentRequest request, SecureLabDbContext db, CancellationToken ct) =>
-{
+}).RequireAuthorization();
+       app.MapPost("/api/incidents", async (CreateIncidentRequest request, SecureLabDbContext db, HttpContext httpContext, CancellationToken ct) =>
+       {
     var now = DateTimeOffset.UtcNow;
     var errors = new Dictionary<string, string[]>();
 
@@ -111,10 +120,15 @@ else if (request.OccurredAtUtc < now.AddDays(-365))
             detail: "Активний інцидент з такою самою темою вже існує.");
 
     // 8. Entity: server-managed поля встановлює лише сервер.
+       var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (!Guid.TryParse(userIdClaim, out var ownerUserId))
+    {
+        return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+    }
     var incident = new Incident
     {
         Id = Guid.NewGuid(),
-        OwnerUserId = DbSeeder.AliceId,
+       OwnerUserId = ownerUserId, 
         Title = title,
         Description = description,
         Severity = severity,
@@ -131,8 +145,8 @@ else if (request.OccurredAtUtc < now.AddDays(-365))
         incident.Id, incident.Title, incident.Description,
         incident.Severity.ToString(), incident.Status.ToString(),
         incident.OccurredAtUtc, incident.CreatedAtUtc);
-    return Results.Created($"/api/incidents/{incident.Id}", response);
-});
+     return Results.Created($"/api/incidents/{incident.Id}", response);
+}).RequireAuthorization();
     }
     private static string EscapeLike(string value) =>
     value.Replace("\\", "\\\\").Replace("_", "\\_").Replace("%", "\\%");
