@@ -44,9 +44,10 @@ if (builder.Environment.IsDevelopment())
     {
         options.AddPolicy("Lab05BrowserProbe", policy =>
         {
-            policy.WithOrigins("http://localhost:4173")
-                  .WithMethods("GET")
-                  .WithHeaders("X-Lab-Cors-Probe");
+           policy.WithOrigins("http://localhost:4173")
+      .WithMethods("GET")
+      .WithHeaders("X-Lab-Cors-Probe")
+      .AllowCredentials();
         });
     });
 }
